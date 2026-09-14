@@ -468,20 +468,12 @@ if [ -f '${SING_BOX_FILE}' ]; then
           .
         end
       )
-      # 2. 强制将所有 TUN 入站的 stack 改为 mixed (兼容并修复老模板)
-      | .inbounds |= map(
-          if .type == "tun" then
-            .stack = "mixed"
-          else
-            .
-          end
-       )
-      # 3. 修改所有 urltest 对象的测速频率（镇压订阅自带的高频测速）
+      # 2. 修改所有 urltest 对象的测速频率（镇压订阅自带的高频测速）
       | (.outbounds[] | select(.type=="urltest")) |=
           (.url = "http://cp.cloudflare.com/generate_204"
            | .interval = "10m0s"
            | .tolerance = 100)
-      # 4. 修复 WS 传输的 ALPN 冲突
+      # 3. 修复 WS 传输的 ALPN 冲突
       # 逻辑：如果底层传输 type 是 "ws"，且开启了 TLS，强制将其 ALPN 约束为 ["http/1.1"]
       | .outbounds |= map(
           if .transport?.type == "ws" and .tls? then
@@ -490,14 +482,14 @@ if [ -f '${SING_BOX_FILE}' ]; then
             .
           end
         )
-      # 5. 修改 experimental.clash_api 的 external_controller / external_ui（如果存在）
+      # 4. 修改 experimental.clash_api 的 external_controller / external_ui（如果存在）
       | if .experimental? and .experimental.clash_api? then
           .experimental.clash_api.external_controller = ":9999"
           | .experimental.clash_api.external_ui = "ui"
         else
           .
         end
-      ## 6. 处理 Trojan 的 Multiplex
+      ## 5. 处理 Trojan 的 Multiplex
       #| (.outbounds[] | select(.type == "trojan" and .server != null and .server != "")) += {
       #    "multiplex": {
       #      "enabled": true,
@@ -508,7 +500,7 @@ if [ -f '${SING_BOX_FILE}' ]; then
       #      "padding": true
       #    }
       #  }
-      ## 7. 插入或修改 DNS UDP 53 inbound(macOS mDNSRespo 会抢占 53 故注释)
+      ## 6. 插入或修改 DNS UDP 53 inbound(macOS mDNSRespo 会抢占 53 故注释)
       #| if any(.inbounds[]; .type=="direct" and .network=="udp") then
       #    .inbounds |= map(
       #      if .type=="direct" and .network=="udp" then
@@ -526,7 +518,7 @@ if [ -f '${SING_BOX_FILE}' ]; then
       #      "network": "udp"
       #    }]
       #  end
-      ## 8. 在 route.rules 里，凡是有 inbound 数组的，就追加 "DNS入站_469138946ba5fa"
+      ## 7. 在 route.rules 里，凡是有 inbound 数组的，就追加 "DNS入站_469138946ba5fa"
       #| .route.rules |= map(
       #    if .inbound? and (.inbound | type == "array") then
       #      if any(.inbound[]; . == "DNS入站_469138946ba5fa") then
@@ -538,7 +530,7 @@ if [ -f '${SING_BOX_FILE}' ]; then
       #      .
       #    end
       #  )
-      # 9. 去掉 transport.path 里的 ? 之后部分
+      # 8. 去掉 transport.path 里的 ? 之后部分
       | (.outbounds |= map(
           if .transport?.path? then
             .transport.path |= split("?")[0]
@@ -546,7 +538,7 @@ if [ -f '${SING_BOX_FILE}' ]; then
             .
           end
         ))
-      ## 10. 删除 TUN入站_469138946ba5fa inbound，并同步清理 route.rules 里的引用
+      ## 9. 删除 TUN入站_469138946ba5fa inbound，并同步清理 route.rules 里的引用
       #| .inbounds |= map(select(.tag != "TUN入站_469138946ba5fa"))
       #| .route.rules |= map(
       #    if .inbound? and (.inbound | type == "array") then
@@ -555,7 +547,7 @@ if [ -f '${SING_BOX_FILE}' ]; then
       #      .
       #    end
       #)
-      # 11. 修复 tuic 节点
+      # 10. 修复 tuic 节点
       | .outbounds |= map(
           if .type == "tuic" then
             .uuid |= sub("(%3A|:).*"; "")
