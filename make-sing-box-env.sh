@@ -92,7 +92,7 @@ fi
 
 # 供启动脚本使用的变量（不再拼死 SUB_URL）
 # SUBS_KIND / SUBS_SRC / SUBS_API 会写入 sing-box-start.sh
-SING_BOX_PATH='/SagerNet/sing-box/releases/download/v1.15.0-alpha.6'
+SING_BOX_PATH='/SagerNet/sing-box/releases/download/v1.15.0-alpha.7'
 VERSION=sing-box-$(basename ${SING_BOX_PATH} | tr 'A-Z' 'a-z' | sed 's;v;;g')-linux-arm64.tar.gz
 echo "https://github.com${SING_BOX_PATH}/${VERSION}"
 SING_BOX_BIN_FILE_URL="https://github.com${SING_BOX_PATH}/${VERSION}"
@@ -102,8 +102,8 @@ SING_BOX_BIN_FILE_RENAME="${SING_BOX_DIR_PATH}/sing-box"
 UI_PATH=$(curl -SL --connect-timeout 30 -m 60 --speed-time 30 --speed-limit 1 --retry 2 -H "Connection: keep-alive" -k 'https://github.com/Zephyruso/zashboard/releases' | sed 's;";\n;g;s;tag;download;g' | grep '/download/' | head -n 1)
 UI_URL="https://github.com${UI_PATH}/dist.zip"
 UI_FILE=${SING_BOX_DIR}'/ui.zip'
-SING_BOX_CONFIG_TEMPLATES_URL="https://github.com/yHUJibXnPx/make-sing-box-envs-nanopir3s-armbian/raw/refs/heads/master/1.15.0-alpha.6.json"
-SING_BOX_CONFIG_TEMPLATES_FILE=${SING_BOX_DIR_PATH}'/1.15.0-alpha.6.json'
+SING_BOX_CONFIG_TEMPLATES_URL="https://github.com/yHUJibXnPx/make-sing-box-envs-nanopir3s-armbian/raw/refs/heads/master/1.15.0-alpha.7.json"
+SING_BOX_CONFIG_TEMPLATES_FILE=${SING_BOX_DIR_PATH}'/1.15.0-alpha.7.json'
 TMP_FILE=${SING_BOX_DIR_PATH}'/temp_config.json'
 OUT_FILE=${SING_BOX_DIR_PATH}'/out_config.json'
 BASE_FILE=${SING_BOX_DIR_PATH}'/base_config.json'

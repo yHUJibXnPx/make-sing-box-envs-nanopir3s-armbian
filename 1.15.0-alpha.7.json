@@ -107,7 +107,7 @@
   ],
   "route": {
     "rules": [
-      { "port": [993, 143, 995, 110, 465, 25, 994], "domain_suffix": [ ".126.com", ".163.com", ".netease.com", ".126.net", ".163.net", ".year.net" ], "ip_cidr": [ "117.135.214.14", "111.124.203.46", "111.124.203.51", "220.197.33.211" ], "outbound": "代理_469138946ba5fa" },
+      { "port": [110, 143, 25, 465, 587, 993, 994, 995], "outbound": "代理_469138946ba5fa" },
       { "package_name": ["com.duolingo"], "outbound": "代理_469138946ba5fa" },
       { "rule_set": "geosite-duolingo", "outbound": "代理_469138946ba5fa" },
       { "protocol": "dns", "action": "hijack-dns" },
