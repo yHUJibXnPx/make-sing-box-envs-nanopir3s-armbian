@@ -54,6 +54,7 @@
         "action": "predefined",
         "rcode": "NXDOMAIN"
       },
+      { "domain_suffix": ["i5stuw.com", "olddriverapp.com", "4listenapp.com", "66img.cc", "kandeshu.com", "flurry.com", "umeng.com", "m.taobao.com", "xn--tlqu4rt97b3jfmwiqta.com"], "server": "解析CLOUDFLAREDNS_469138946ba5fa" },
       { "rule_set": [ "geosite-private", "geosite-cn" ], "server": "解析ALIDNS_469138946ba5fa" },
       { "rule_set": "geosite-duolingo", "server": "解析CLOUDFLAREDNS_469138946ba5fa" },
       { "rule_set": "category-ai-!cn", "server": "解析CLOUDFLAREDNS_469138946ba5fa" },
@@ -107,19 +108,18 @@
   ],
   "route": {
     "rules": [
-      { "port": [110, 143, 25, 465, 587, 993, 994, 995], "outbound": "代理_469138946ba5fa" },
-      { "package_name": ["com.duolingo"], "outbound": "代理_469138946ba5fa" },
-      { "rule_set": "geosite-duolingo", "outbound": "代理_469138946ba5fa" },
       { "protocol": "dns", "action": "hijack-dns" },
       { "port": 53, "action": "hijack-dns" },
+      { "inbound": [ "混合入站_469138946ba5fa", "TUN入站_469138946ba5fa" ], "action": "sniff" },
+      { "domain_suffix": ["i5stuw.com", "olddriverapp.com", "4listenapp.com", "66img.cc","kandeshu.com", "flurry.com", "umeng.com", "m.taobao.com", "xn--tlqu4rt97b3jfmwiqta.com"], "outbound": "自动_469138946ba5fa" },
+      { "port": [110, 143, 25, 465, 587, 993, 994, 995], "outbound": "自动_469138946ba5fa" },
+      { "package_name": ["com.duolingo"], "outbound": "自动_469138946ba5fa" },
+      { "rule_set": "geosite-duolingo", "outbound": "自动_469138946ba5fa" },
       {
         "process_name": [ "sing-box.exe", "sing-box", "io.nekohasekai.sfa" ],
         "outbound": "直连_469138946ba5fa"
       },
-      {
-        "rule_set": [ "geosite-category-ads-all", "megamori" ],
-        "action": "reject"
-      },
+      { "rule_set": [ "geosite-category-ads-all", "megamori" ], "action": "reject" },
       {
         "domain": [
           "books-analytics-events.apple.com",
@@ -140,10 +140,6 @@
           "grs.hicloud.com"
         ],
         "action": "reject"
-      },
-      {
-        "inbound": [ "混合入站_469138946ba5fa", "TUN入站_469138946ba5fa" ],
-        "action": "sniff"
       },
       { "ip_is_private": true, "outbound": "直连_469138946ba5fa" },
       { "rule_set": "geosite-private", "outbound": "直连_469138946ba5fa" },
