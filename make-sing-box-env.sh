@@ -37,8 +37,8 @@ echo "安装/升级 unar..."
 sudo apt -y install unar || sudo apt -y upgrade unar
 
 # 安装 jq（后面提取节点、按国家分组全靠它）
-echo "安装/升级 jq..."
-sudo apt -y install jq || sudo apt -y upgrade jq
+#echo "安装/升级 jq..."
+#sudo apt -y install jq || sudo apt -y upgrade jq
 
 # 检查 python3
 if ! command -v python3 >/dev/null 2>&1; then
@@ -221,6 +221,8 @@ IFS_BAK=\$IFS
 IFS=\$'\n'
 set -e
 
+DISABLE_TUN="\${DISABLE_TUN:-0}"
+FIX_WEIRD_NODES="\${FIX_WEIRD_NODES:-0}"
 echo "start sing-box..."
 if [ -f '${TMP_FILE}' ]; then
   rm -fv '${TMP_FILE}'
@@ -279,18 +281,23 @@ fetch_raw() {
 }
 
 is_singbox_json() {
-  command -v jq >/dev/null 2>&1 || return 1
-  jq -e 'type == "object" and (.outbounds | type == "array")' "\$1" >/dev/null 2>&1
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); sys.exit(0 if isinstance(d,dict) and isinstance(d.get("outbounds"),list) else 1)' "\$1" >/dev/null 2>&1
 }
 
 # 有的转换器会返回「纯 outbounds 数组」，包一层便于后续 jq
 normalize_to_singbox_file() {
   local src="\$1" dest="\$2"
-  if jq -e 'type == "array"' "\$src" >/dev/null 2>&1; then
-    jq '{ "outbounds": . }' "\$src" > "\$dest"
-  else
-    cp -f "\$src" "\$dest"
-  fi
+  python3 - "\$src" "\$dest" << 'PY'
+import json, shutil, sys
+src, dest = sys.argv[1], sys.argv[2]
+with open(src, "r", encoding="utf-8") as f:
+    d = json.load(f)
+if isinstance(d, list):
+    with open(dest, "w", encoding="utf-8") as f:
+        json.dump({"outbounds": d}, f, indent=2, ensure_ascii=False)
+else:
+    shutil.copyfile(src, dest)
+PY
 }
 
 convert_via_api() {
@@ -323,7 +330,7 @@ convert_via_api() {
   fi
   if ! is_singbox_json "\$tmp_conv"; then
     # 尝试数组形式
-    if jq -e 'type == "array"' "\$tmp_conv" >/dev/null 2>&1; then
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); sys.exit(0 if isinstance(d,list) else 1)' "\$tmp_conv" >/dev/null 2>&1; then
       normalize_to_singbox_file "\$tmp_conv" "\$dest"
       return 0
     fi
@@ -341,7 +348,7 @@ fetch_raw "\$TMP_RAW"
 if is_singbox_json "\$TMP_RAW"; then
   echo "Detected sing-box JSON — skip conversion API (preserves Reality fields better)."
   normalize_to_singbox_file "\$TMP_RAW" "\$TMP_FILE"
-elif jq -e 'type == "array" and (.[0] | type == "object")' "\$TMP_RAW" >/dev/null 2>&1; then
+elif python3 -c 'import json,sys; d=json.load(open(sys.argv[1],encoding="utf-8")); sys.exit(0 if isinstance(d,list) and len(d)>0 and isinstance(d[0],dict) else 1)' "\$TMP_RAW" >/dev/null 2>&1; then
   echo "Detected JSON array — wrap as outbounds."
   normalize_to_singbox_file "\$TMP_RAW" "\$TMP_FILE"
 else
@@ -367,92 +374,64 @@ echo "Temporary config ready: \$TMP_FILE"
 set +e
 
 # 从订阅中提取节点
-jq '[.outbounds[] | select(.server != null and .server != "")]' '$TMP_FILE' > '$NODES'
-[ ! -f "$NODES" ] && echo "全节点文件不存在：$NODES" && exit 1
+python3 - '${TMP_FILE}' '${SING_BOX_CONFIG_TEMPLATES_FILE}' '${NODES}' '${NODES_CONFIG}' '${GROUPS_FILE}' << 'PY469138946ba5fa'
+import json, re, sys
 
-# 将节点全部插入到 \`.outbounds\`
-jq --slurpfile new_nodes '$NODES' '
-  .outbounds += \$new_nodes[0]
-' '$SING_BOX_CONFIG_TEMPLATES_FILE' > '${SING_BOX_DIR_PATH}/config_tmp.json' && mv '${SING_BOX_DIR_PATH}/config_tmp.json' '${NODES_CONFIG}'
-[ ! -f "$NODES_CONFIG" ] && echo "节点配置文件不存在：$NODES_CONFIG" && exit 1
+tmp_file, tmpl_file, nodes_file, out_file, groups_file = sys.argv[1:6]
 
-# 将节点名全部插入到 自动_469138946ba5fa
-jq --slurpfile new_nodes '$NODES' '
-  .outbounds |= map(
-    if .tag == "自动_469138946ba5fa" and .type == "urltest" then
-      .outbounds = (\$new_nodes[0] | map(.tag))
-    else
-      .
-    end
-  )
-' '$NODES_CONFIG' > '${SING_BOX_DIR_PATH}/config_tmp.json' && mv '${SING_BOX_DIR_PATH}/config_tmp.json' '${NODES_CONFIG}'
+with open(tmp_file, "r", encoding="utf-8") as f:
+    sub_data = json.load(f)
 
-# 将节点名全部插入到 手动_469138946ba5fa
-jq --slurpfile new_nodes '$NODES' '
-  .outbounds |= map(
-    if .tag == "手动_469138946ba5fa" and .type == "selector" then
-      .outbounds = (\$new_nodes[0] | map(.tag))
-    else
-      .
-    end
-  )
-' '$NODES_CONFIG' > '${SING_BOX_DIR_PATH}/config_tmp.json' && mv '${SING_BOX_DIR_PATH}/config_tmp.json' '${NODES_CONFIG}'
+nodes = [
+    ob for ob in sub_data.get("outbounds", [])
+    if isinstance(ob, dict) and ob.get("server")
+]
+with open(nodes_file, "w", encoding="utf-8") as f:
+    json.dump(nodes, f, indent=2, ensure_ascii=False)
 
-# 遍历分组定义文件，每行格式：tag|pattern
-# 已匹配过的节点集合（互斥用）
-matched_all='[]'
-while IFS='|' read -r tag pattern; do
-  echo "处理分组：\$tag"
+with open(tmpl_file, "r", encoding="utf-8") as f:
+    cfg = json.load(f)
 
-  # 只匹配「还没有被任何分组抢走」的节点
-  matched=\$(jq --arg pattern "\$pattern" --argjson already "\$matched_all" '
-    [.[]
-     | select(.tag | test(\$pattern; "i"))
-     | select(.tag as \$t | (\$already | index(\$t) | not))
-     | .tag]
-  ' '$NODES')
+cfg["outbounds"].extend(nodes)
+all_tags = [n["tag"] for n in nodes if "tag" in n]
 
-  if [ \$? -ne 0 ]; then
-    echo "  ⚠ 正则匹配出错，跳过该分组（检查 pattern 里是否有特殊字符没转义）"
-    continue
-  fi
+for ob in cfg["outbounds"]:
+    if ob.get("tag") == "自动_469138946ba5fa" and ob.get("type") == "urltest":
+        ob["outbounds"] = all_tags
+    elif ob.get("tag") == "手动_469138946ba5fa" and ob.get("type") == "selector":
+        ob["outbounds"] = all_tags
 
-  # 如果没有匹配结果，跳过
-  if [ "\$(echo "\$matched" | jq 'length')" -eq 0 ]; then
-    echo "  ➤ 无匹配节点，跳过"
-    continue
-  fi
+matched_all = set()
+with open(groups_file, "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        tag, pattern = line.split("|", 1)
+        print(f"处理分组：{tag}")
+        try:
+            rx = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            print(f"  ⚠ 正则匹配出错，跳过该分组: {e}")
+            continue
 
-  # 把本轮匹配到的节点加入总集合
-  matched_all=\$(jq -n --argjson new "\$matched" --argjson old "\$matched_all" '
-    \$old + \$new | unique
-  ')
+        matched = [t for t in all_tags if t not in matched_all and rx.search(t)]
+        if not matched:
+            print("  ➤ 无匹配节点，跳过")
+            continue
 
-  # 判断分组是否存在
-  exists=\$(jq --arg tag "\$tag" '.outbounds[] | select(.tag == \$tag)' '$NODES_CONFIG')
+        matched_all.update(matched)
+        target = next((ob for ob in cfg["outbounds"] if ob.get("tag") == tag), None)
+        if target is None:
+            print("  ➤ 分组不存在，创建新 selector")
+            cfg["outbounds"].append({"type": "selector", "tag": tag, "outbounds": matched})
+        elif target.get("type") in ("selector", "urltest"):
+            print("  ➤ 分组已存在，更新节点列表")
+            target["outbounds"] = matched
 
-  if [ -z "\$exists" ]; then
-    echo "  ➤ 分组不存在，创建新 selector"
-    jq --arg tag "\$tag" --argjson outbounds "\$matched" '
-      .outbounds += [{
-        type: "selector",
-        tag: \$tag,
-        outbounds: \$outbounds
-      }]
-    ' '$NODES_CONFIG' > '${SING_BOX_DIR_PATH}/config_tmp.json' && mv '${SING_BOX_DIR_PATH}/config_tmp.json' '${NODES_CONFIG}'
-  else
-    echo "  ➤ 分组已存在，更新节点列表"
-    jq --arg tag "\$tag" --argjson outbounds "\$matched" '
-      .outbounds |= map(
-        if .tag == \$tag and (.type == "selector" or .type == "urltest") then
-          . + {outbounds: \$outbounds}
-        else
-          .
-        end
-      )
-    ' '$NODES_CONFIG' > '${SING_BOX_DIR_PATH}/config_tmp.json' && mv '${SING_BOX_DIR_PATH}/config_tmp.json' '${NODES_CONFIG}'
-  fi
-done < '$GROUPS_FILE'
+with open(out_file, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+PY469138946ba5fa
 
 set -e
 
@@ -465,105 +444,92 @@ if [ -f '${SING_BOX_FILE}' ]; then
 
     # 替换测试 URL 为更稳定的 Cloudflare
     # 修复 sing-box config.json 中自动选择策略的 url-test 设置
-    jq '
-      # 1. 修改 mixed 的 listen_port
-      .inbounds |= map(
-        if .type == "mixed" then
-          .listen_port = 7890
-        else
-          .
-        end
-      )
-      # 2. 修改所有 urltest 对象的测速频率（镇压订阅自带的高频测速）
-      | (.outbounds[] | select(.type=="urltest")) |=
-          (.url = "http://cp.cloudflare.com/generate_204"
-           | .interval = "10m0s"
-           | .tolerance = 100)
-      # 3. 修复 WS 传输的 ALPN 冲突
-      # 逻辑：如果底层传输 type 是 "ws"，且开启了 TLS，强制将其 ALPN 约束为 ["http/1.1"]
-      | .outbounds |= map(
-          if .transport?.type == "ws" and .tls? then
-            .tls.alpn = ["http/1.1"]
-          else
-            .
-          end
-        )
-      # 4. 修改 experimental.clash_api 的 external_controller / external_ui（如果存在）
-      | if .experimental? and .experimental.clash_api? then
-          .experimental.clash_api.external_controller = ":9999"
-          | .experimental.clash_api.external_ui = "ui"
-        else
-          .
-        end
-      ## 5. 处理 Trojan 的 Multiplex
-      #| (.outbounds[] | select(.type == "trojan" and .server != null and .server != "")) += {
-      #    "multiplex": {
-      #      "enabled": true,
-      #      "protocol": "h2mux",
-      #      "max_connections": 1,
-      #      "min_streams": 4,
-      #      "max_streams": 0,
-      #      "padding": true
-      #    }
-      #  }
-      ## 6. 插入或修改 DNS UDP 53 inbound(macOS mDNSRespo 会抢占 53 故注释)
-      #| if any(.inbounds[]; .type=="direct" and .network=="udp") then
-      #    .inbounds |= map(
-      #      if .type=="direct" and .network=="udp" then
-      #        .listen_port = 53
-      #      else
-      #        .
-      #      end
-      #    )
-      #  else
-      #    .inbounds += [{
-      #      "type": "direct",
-      #      "tag": "DNS入站_469138946ba5fa",
-      #      "listen": "0.0.0.0",
-      #      "listen_port": 53,
-      #      "network": "udp"
-      #    }]
-      #  end
-      ## 7. 在 route.rules 里，凡是有 inbound 数组的，就追加 "DNS入站_469138946ba5fa"
-      #| .route.rules |= map(
-      #    if .inbound? and (.inbound | type == "array") then
-      #      if any(.inbound[]; . == "DNS入站_469138946ba5fa") then
-      #        .
-      #      else
-      #        .inbound += ["DNS入站_469138946ba5fa"]
-      #      end
-      #    else
-      #      .
-      #    end
-      #  )
-      # 8. 去掉 transport.path 里的 ? 之后部分
-      | (.outbounds |= map(
-          if .transport?.path? then
-            .transport.path |= split("?")[0]
-          else
-            .
-          end
-        ))
-      ## 9. 删除 TUN入站_469138946ba5fa inbound，并同步清理 route.rules 里的引用
-      #| .inbounds |= map(select(.tag != "TUN入站_469138946ba5fa"))
-      #| .route.rules |= map(
-      #    if .inbound? and (.inbound | type == "array") then
-      #      .inbound |= map(select(. != "TUN入站_469138946ba5fa"))
-      #    else
-      #      .
-      #    end
-      #)
-      # 10. 修复 tuic 节点
-      | .outbounds |= map(
-          if .type == "tuic" then
-            .uuid |= sub("(%3A|:).*"; "")
-            | .uuid |= sub("@\\\\[.*\$"; "")
-            | .server_port |= (if type=="string" then tonumber else . end)
-          else
-            .
-          end
-        )
-      ' '${SING_BOX_FILE}' > '${SING_BOX_FILE}.tmp' && mv '${SING_BOX_FILE}.tmp' '${SING_BOX_FILE}'
+    DISABLE_TUN="\$DISABLE_TUN" FIX_WEIRD_NODES="\$FIX_WEIRD_NODES" python3 - '${SING_BOX_FILE}' << 'PY469138946ba5fa'
+import importlib.util, json, os, sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+# 1. 修改 mixed 的 listen_port
+for ib in cfg.get("inbounds", []):
+    if ib.get("type") == "mixed":
+        ib["listen_port"] = 7890
+
+for ob in cfg.get("outbounds", []):
+    # 2. 修改所有 urltest 测速频率
+    if ob.get("type") == "urltest":
+        ob["url"] = "http://cp.cloudflare.com/generate_204"
+        ob["interval"] = "10m0s"
+        ob["tolerance"] = 100
+
+    # 3. 修复 WS + TLS 的 ALPN 冲突
+    tr = ob.get("transport")
+    tls = ob.get("tls")
+    if isinstance(tr, dict) and tr.get("type") == "ws" and isinstance(tls, dict):
+        tls["alpn"] = ["http/1.1"]
+
+    # 8. 去掉 transport.path 里的 ? 之后部分
+    if isinstance(tr, dict) and isinstance(tr.get("path"), str):
+        tr["path"] = tr["path"].split("?", 1)[0]
+
+    # 10. 修复 tuic 节点 uuid 和端口类型
+    if ob.get("type") == "tuic":
+        u = ob.get("uuid", "")
+        if isinstance(u, str):
+            for sep in ("%3A", ":", "@["):
+                u = u.split(sep, 1)[0]
+            ob["uuid"] = u
+        if isinstance(ob.get("server_port"), str) and ob["server_port"].isdigit():
+            ob["server_port"] = int(ob["server_port"])
+
+# 4. 修改 experimental.clash_api
+clash_api = cfg.get("experimental", {}).get("clash_api")
+if isinstance(clash_api, dict):
+    clash_api["external_controller"] = ":9999"
+    clash_api["external_ui"] = "ui"
+
+# 9. 探针开关：删除 TUN 入站
+if os.environ.get("DISABLE_TUN") == "1":
+    cfg["inbounds"] = [ib for ib in cfg.get("inbounds", []) if ib.get("tag") != "TUN入站_469138946ba5fa"]
+    for r in cfg.get("route", {}).get("rules", []):
+        if isinstance(r.get("inbound"), list):
+            r["inbound"] = [x for x in r["inbound"] if x != "TUN入站_469138946ba5fa"]
+
+# 11. 探针开关：清理 2026 订阅里的怪字段（结构化操作，绝不破坏 JSON）
+if os.environ.get("FIX_WEIRD_NODES") == "1":
+    for ob in cfg.get("outbounds", []):
+        if not isinstance(ob, dict):
+            continue
+        if ob.get("method") == "chacha20-poly1305":
+            ob["method"] = "chacha20-ietf-poly1305"
+        if ob.get("packet_encoding") == "none":
+            ob["packet_encoding"] = "xudp"
+        if ob.get("flow") == "xtls-rprx-vision-udp443":
+            ob.pop("flow", None)
+        if ob.get("plugin") == "simple-obfs":
+            ob.pop("plugin", None)
+            ob.pop("plugin_opts", None)
+        ob.pop("encryption", None)
+        ob.pop("tcp_fast_open", None)
+        if isinstance(ob.get("server_ports"), list):
+            ob["server_ports"] = [str(p).replace("-", ":") for p in ob["server_ports"]]
+        utls = (ob.get("tls") or {}).get("utls")
+        if isinstance(utls, dict) and utls.get("fingerprint") == "unsafe":
+            utls["fingerprint"] = "firefox"
+
+# 12. 可选外部热插拔钩子：如果同目录存在 custom_fix.py 且定义了 patch(cfg)，自动加载执行
+hook_file = os.path.join(os.path.dirname(path), "custom_fix.py")
+if os.path.isfile(hook_file):
+    spec = importlib.util.spec_from_file_location("custom_fix", hook_file)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if hasattr(mod, "patch"):
+        mod.patch(cfg)
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+PY469138946ba5fa
 else
   echo "Error: ${SING_BOX_FILE} is not exist. Exiting."
   exit 3
