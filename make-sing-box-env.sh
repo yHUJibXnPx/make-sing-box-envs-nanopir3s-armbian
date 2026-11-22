@@ -40,6 +40,12 @@ sudo apt -y install unar || sudo apt -y upgrade unar
 echo "安装/升级 jq..."
 sudo apt -y install jq || sudo apt -y upgrade jq
 
+# 检查 python3
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "未检测到 python3，请先自行安装后再运行本脚本。"
+  exit 1
+fi
+
 echo "所有工具安装完成"
 
 USER_HOME="$HOME"
@@ -123,12 +129,12 @@ GROUPS_PATTERNS=$(cat <<'469138946ba5fa'
 香港_469138946ba5fa|香港|港|\bHK\b|Hong Kong|HongKong|HKG|🇭🇰
 台湾_469138946ba5fa|台湾|台|\bTW\b|Taiwan|Taipei|Taichung|Kaohsiung|Tainan|Hsinchu|Changhua|New Taipei|台北|台中|高雄|台南|新竹|彰化|新北|🇹🇼
 韩国_469138946ba5fa|韩国|韩|\bKR\b|Korea|South Korea|Seoul|Busan|Incheon|首尔|釜山|仁川|🇰🇷
-英国_469138946ba5fa|英国|英|\bUK\b|GB|United Kingdom|England|London|Manchester|伦敦|曼彻斯特|🇬🇧
+英国_469138946ba5fa|英国|英|\bUK\b|\bGB\b|United Kingdom|England|London|Manchester|伦敦|曼彻斯特|🇬🇧
 加拿大_469138946ba5fa|加拿大|加|\bCA\b|Canada|Toronto|Vancouver|Montreal|多伦多|温哥华|蒙特利尔|🇨🇦
 澳大利亚_469138946ba5fa|澳大利亚|澳|\bAU\b|Australia|Sydney|Melbourne|Brisbane|Perth|悉尼|墨尔本|布里斯班|珀斯|🇦🇺
 法国_469138946ba5fa|法国|法|\bFR\b|France|Paris|Marseille|巴黎|马赛|🇫🇷
 荷兰_469138946ba5fa|荷兰|荷|\bNL\b|Netherlands|Amsterdam|阿姆斯特丹|🇳🇱
-美国_469138946ba5fa|美国|美|\bUS\b|USA|United States|America|Los Angeles|LA|San Francisco|SF|Silicon Valley|San Jose|Seattle|Chicago|Dallas|New York|NY|Miami|Atlanta|Ashburn|Phoenix|Las Vegas|Denver|洛杉矶|旧金山|硅谷|圣何塞|西雅图|芝加哥|达拉斯|纽约|迈阿密|亚特兰大|阿什本|凤凰城|拉斯维加斯|丹佛|🇺🇸
+美国_469138946ba5fa|美国|美|\bUS\b|\bUSA\b|United States|America|Los Angeles|\bLA\b|San Francisco|\bSF\b|Silicon Valley|San Jose|Seattle|Chicago|Dallas|New York|\bNY\b|Miami|Atlanta|Ashburn|Phoenix|Las Vegas|Denver|洛杉矶|旧金山|硅谷|圣何塞|西雅图|芝加哥|达拉斯|纽约|迈阿密|亚特兰大|阿什本|凤凰城|拉斯维加斯|丹佛|🇺🇸
 469138946ba5fa
 )
 BASE_SING_BOX_CONFIG_FIXSCRIPT=$(cat <<'469138946ba5fa'
